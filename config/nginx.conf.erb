@@ -1,4 +1,5 @@
-worker_processes 1;
+daemon off;
+worker_processes <%= ENV['NGINX_WORKERS'] || 1 %>;
 
 events {
     use epoll;
@@ -12,13 +13,16 @@ http {
     gzip_min_length 512;
 
     upstream frontends{
-        server web:5000;
+        # Load Balancing: https://www.nginx.com/resources/admin-guide/load-balancer/#method
+        <% for x in 0..((ENV['WEB_PROCESSES'] || 2).to_i - 1) %>
+            server localhost:888<%= x %>;
+        <% end %>
     }
 
     server_tokens off;
 
-    access_log /var/log/nginx/access.log;
-    error_log /var/log/nginx/error.log;
+    access_log logs/access.log;
+    error_log logs/error.log;
 
     include mime.types;
     default_type application/octet-stream;
@@ -30,13 +34,12 @@ http {
     # to all frontends)
     proxy_next_upstream error http_502;
 
-    #Must read the body in 5 seconds.
+    # Must read the body in 5 seconds.
     client_body_timeout 5;
 
     server {
-        listen 80;
+        listen <%= ENV["PORT"] %>;
         server_name _;
-        keepalive_timeout 5;
         client_max_body_size 50M;
 
         location = /favicon.ico {
